@@ -1,0 +1,52 @@
+
+========================================
+File: /home/hasnocool/Github/active/python-disk-mount/mount.py
+========================================
+import os
+import subprocess
+
+def get_blkid_output():
+    try:
+        blkid_output = subprocess.check_output(["blkid"], text=True)
+        return blkid_output.strip().split("\n")
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing blkid: {e}")
+        return []
+
+def parse_blkid_output(blkid_lines):
+    uuid_mapping = {}
+    for line in blkid_lines:
+        if "loop" in line or "snap" in line or "TYPE=\"swap\"" in line:
+            continue
+        parts = line.split(":")
+        device = parts[0]
+        properties = parts[1].split()
+        uuid = None
+        for prop in properties:
+            if "UUID=" in prop:
+                uuid = prop.split("=")[1].strip('"')
+                break
+        if uuid:
+            uuid_mapping[uuid] = device
+    return uuid_mapping
+
+def mount_by_uuid(uuid_mapping):
+    for uuid, device in uuid_mapping.items():
+        mount_point = f"/mnt/{uuid}"
+        try:
+            if not os.path.exists(mount_point):
+                os.makedirs(mount_point)
+            else:
+                print(f"Directory {mount_point} already exists. Mounting to it.")
+            
+            subprocess.run(["mount", "-o", "rw", "-U", uuid, mount_point], check=True)
+            print(f"Mounted {device} at {mount_point}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error mounting {device}: {e}")
+        except FileExistsError:
+            print(f"Directory {mount_point} already exists. Skipping.")
+
+if __name__ == "__main__":
+    blkid_output = get_blkid_output()
+    uuid_mapping = parse_blkid_output(blkid_output)
+    mount_by_uuid(uuid_mapping)
